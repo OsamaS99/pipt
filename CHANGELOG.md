@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.5] - 2025-08-30
+
+### Fixed
+- Publish workflow triggers broadened (release/workflow_dispatch) to ensure PyPI deployment runs when creating a GitHub Release.
+
 ## [0.1.4] - 2025-08-30
 
 ### Added
