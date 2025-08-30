@@ -8,7 +8,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union, Any, cast
+from typing import Dict, List, Optional, Tuple, Union, cast
 
 from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
