@@ -1,19 +1,24 @@
 # Changelog
 
-## [0.1.2] - 2025-08-30
+## [0.1.3] - 2025-08-30
 
-- Fix: publishing via PyPI Trusted Publisher (OIDC)
-- Chore: version bump and release housekeeping
+This is the first public baseline release of pipt. It consolidates all prior work and sets up automated publishing.
 
-## [0.1.1] - 2025-08-30
+### Features
+- Time-aware dependency resolution with iterative constraints.
+- CLI commands: `list`, `resolve`, `install`, `lock`.
+- Caching for PyPI JSON metadata, polished output via `rich`, and Typer-based UX.
 
-- CI: add GitHub Actions environment for Trusted Publishing (pypi)
-- Docs: improved README, wider logo, clearer quickstart
-- Tooling: cleaned mypy config and CLI typing fixes
+### CI/CD
+- GitHub Actions CI across Python 3.9–3.12 (ruff, mypy, pytest).
+- Trusted Publishing (OIDC) to PyPI via `publish.yml` workflow and `pypi` environment.
 
-## [0.1.0] - 2025-08-30
+### Docs
+- Improved README with Quickstart, usage examples, options, and compatibility notes.
+- Wider logo and absolute image URL so it renders on PyPI.
+- Badges for CI and PyPI.
 
-- Initial public release of pipt
-- Time-aware resolution with iterative constraints
-- Commands: list, resolve, install, lock
-- Disk cache for PyPI JSON, rich CLI, Typer-based UX
+### Tooling
+- mypy configuration (`ignore_missing_imports`) and CLI typing fixes.
+- `.gitignore` updated to exclude build/ and dist/.
+- MIT `LICENSE` added.
