@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.2] - 2025-08-30
+
+- Fix: publishing via PyPI Trusted Publisher (OIDC)
+- Chore: version bump and release housekeeping
+
 ## [0.1.1] - 2025-08-30
 
 - CI: add GitHub Actions environment for Trusted Publishing (pypi)
