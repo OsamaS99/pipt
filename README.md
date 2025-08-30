@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/logo.png" alt="pipt Logo" width="640"/>
+  <img src="https://cdn.jsdelivr.net/gh/OsamaS99/pipt@main/assets/logo.png" alt="pipt Logo" width="640"/>
   <p align="center">
     The Python Package Time Machine
   </p>
