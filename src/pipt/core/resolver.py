@@ -8,7 +8,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union, Any, cast
 
 from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
@@ -154,18 +154,18 @@ def _wheel_python_tags_for_version(meta: dict, ver: Version) -> List[str]:
     return sorted(tags, key=_key)
 
 
-def _suggest_python_from_specs(specs_or_meta, ver: Optional[Version] = None) -> Optional[str]:
+def _suggest_python_from_specs(specs_or_meta: Union[dict, List[str]], ver: Optional[Version] = None) -> Optional[str]:
     # Accept both (list of spec strings) or (meta dict plus version)
     if isinstance(specs_or_meta, dict) and ver is not None:
         meta = specs_or_meta
         wheel_pys = _wheel_python_tags_for_version(meta, ver)
-        for cand in wheel_pys:
-            if cand in ("3",):
+        for py_tag in wheel_pys:
+            if py_tag in ("3",):
                 continue
-            return cand
-        specs = _requires_python_for_version(meta, ver)
+            return py_tag
+        specs: List[str] = _requires_python_for_version(meta, ver)
     else:
-        specs = specs_or_meta  # type: ignore
+        specs = cast(List[str], specs_or_meta)
     from packaging.specifiers import SpecifierSet as _SS
 
     mins: List[str] = []
@@ -181,9 +181,9 @@ def _suggest_python_from_specs(specs_or_meta, ver: Optional[Version] = None) -> 
                 try:
                     parts = sp.version.split(".")
                     if len(parts) >= 2 and parts[0] == "3":
-                        cand = (3, int(parts[1]))
-                        if minv is None or cand > minv:
-                            minv = cand
+                        tuple_cand: Tuple[int, int] = (3, int(parts[1]))
+                        if minv is None or tuple_cand > minv:
+                            minv = tuple_cand
                 except Exception:
                     continue
         if minv:

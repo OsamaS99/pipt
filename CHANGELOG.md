@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.7] - 2025-08-30
+
+### Fixed
+- Mypy typing errors in resolver (_suggest_python_from_specs) causing CI failures.
+
+### Changed
+- Publish workflow runs only on tag push (and manual dispatch) to avoid duplicate releases when also creating a GitHub Release.
+
 ## [0.1.6] - 2025-08-30
 
 ### Added
