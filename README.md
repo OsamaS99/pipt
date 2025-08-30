@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/logo.png" alt="pipt Logo" width="400"/>
+  <img src="assets/logo.png" alt="pipt Logo" width="640"/>
   <p align="center">
     The Python Package Time Machine
   </p>
@@ -14,93 +14,110 @@
 
 ---
 
-`pipt` is a command-line tool that acts as a time machine for your Python environment. It allows you to install packages and their dependencies exactly as they were on a specific date, ensuring perfect historical reproducibility.
+`pipt` is a command-line tool that acts as a time machine for your Python environment. It lets you install packages and their dependencies exactly as they were on a specific date, making past environments reproducible without hunting down historical versions by hand.
 
-It's not a new package manager, but a smart wrapper around `pip`. It uses `pip`'s powerful resolver to do the heavy lifting, while it intelligently finds the right versions for you.
+It's not a new package manager. It wraps `pip`, using its resolver to do the heavy lifting while `pipt` finds the right time-appropriate releases for you.
 
-### Key Features
+## Quickstart
 
-- **Reproducible Builds:** Guarantee that your project's dependencies are identical to what they were in the past.
-- **Date-Based Resolution:** Specify a date, and `pipt` will find the latest package versions available on or before that day.
-- **Lockfile Generation:** Create `pip`-compatible lockfiles for pinning dependencies to a specific point in time.
-- **Smart Wrapper:** Leverages `pip`'s battle-tested engine, making it lightweight and reliable.
-- **Polished UX:** A beautiful and intuitive command-line experience powered by `rich`.
+- See what you’d get as of a date:
 
-### Installation
+```bash
+pipt resolve "pandas<2.0" --date 2023-01-01
+```
 
-You can install `pipt` using `pip`:
+- Install with a cutoff date:
+
+```bash
+pipt install "pandas<2.0" --date 2023-01-01
+```
+
+- Create a lockfile you can install with pip later:
+
+```bash
+pipt lock django --date 2021-03-15 > requirements.lock
+pip install -r requirements.lock
+```
+
+## Key Features
+
+- Reproducible builds tied to a specific date
+- Date-based resolution: choose the latest versions available on or before the cutoff
+- Lockfile generation compatible with `pip`
+- Works with your existing workflows (constraints, pre-releases, yanked handling)
+- Polished CLI powered by `rich`
+
+## Installation
 
 ```bash
 pip install pipt
 ```
 
-### How It Works
+Or with pipx (recommended for global CLI tools):
 
-`pipt` works by iteratively refining version constraints. It starts with your requested packages, finds the latest versions that existed on the cutoff date, and then runs `pip`'s resolver in a dry-run. If any transitive dependencies are too new, `pipt` adds new constraints for them and repeats the process until a historically accurate dependency set is found.
+```bash
+pipx install pipt
+```
 
-### Usage
+## How It Works
 
-#### Install a Package
+`pipt` iteratively refines version constraints. It starts from your requested requirements, selects the latest releases that existed on the cutoff date, and runs `pip`'s resolver in a dry run. If transitive dependencies are too new, `pipt` tightens constraints and repeats until a historically accurate plan is found.
 
-To install a package as it existed on a specific date, use the `install` command.
+## Usage
+
+### Install a package as of a date
 
 ```bash
 # Install pandas as it was on New Year's Day 2023
-pipt install "pandas<2.0" 2023-01-01
+pipt install "pandas<2.0" --date 2023-01-01
 ```
 
-`pipt` will resolve and install `pandas` and all its dependencies as they were on that date.
-
-#### Resolve Dependencies (Dry-Run)
-
-If you want to see what would be installed without actually installing anything, use the `resolve` command.
+### Resolve (dry run) without installing
 
 ```bash
 # See the dependency plan for flask on June 1st, 2022
-pipt resolve flask 2022-06-01
+pipt resolve flask --date 2022-06-01
 ```
 
-This will output a table of packages and their resolved versions.
+Add JSON output if you want to script around the result:
 
-#### Create a Lockfile
+```bash
+pipt resolve flask --date 2022-06-01 --json
+```
 
-To generate a `requirements.txt`-style lockfile, use the `lock` command.
+### Create a pip-compatible lockfile
 
 ```bash
 # Lock Django and its dependencies to their state on March 15th, 2021
-pipt lock django 2021-03-15 > requirements.lock
+pipt lock django --date 2021-03-15 > requirements.lock
 
-# You can then install from this lockfile with pip
-pip install -r requirements.lock
+# Include hashes for extra integrity
+pipt lock django --date 2021-03-15 --include-hashes > requirements.lock
 ```
 
-You can also include file hashes for added security:
-
-```bash
-pipt lock django 2021-03-15 --include-hashes > requirements.lock
-```
-
-#### List Available Versions
-
-To see all available versions of a package before a certain date, use `list`.
+### List available versions before a date
 
 ```bash
 # List all versions of requests published before 2020
 pipt list requests --before 2020-01-01
 ```
 
-### Philosophy
+### Handy options
 
-`pipt` is designed to be **simple, complete, and lovable**.
+- `--pre`: allow pre-releases when needed
+- `--allow-yanked`: include yanked releases
+- `--python-version X.Y`: resolve as if running on Python X.Y (respects Requires-Python)
+- `-c constraints.txt`: layer your own constraints
 
-- **Simple:** It does one thing well: date-based dependency resolution.
-- **Complete:** It's a robust wrapper around `pip`, handling complex resolution scenarios and edge cases.
-- **Lovable:** It provides a polished user experience that makes dependency management a little more enjoyable.
+## Compatibility
 
-### Contributing
+- Python: 3.9–3.12
+- Platforms: Linux, macOS, Windows
 
-Contributions are welcome! Please see the [Contributing Guide](CONTRIBUTING.md) for more details.
+## Contributing
 
-### License
+Contributions are welcome! See the [Contributing Guide](CONTRIBUTING.md).
+
+## License
 
 `pipt` is licensed under the [MIT License](LICENSE).
