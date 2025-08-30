@@ -195,6 +195,74 @@ async def get_vmax_for_package(
     return Version(best.version)
 
 
+async def get_nearest_for_package(
+    metadata: Dict[str, Any], cutoff_dt: datetime, options: Options
+) -> Optional[Version]:
+    """Return the version whose first upload is nearest to cutoff (<= preferred over >)."""
+    versions = await _collect_versions_from_metadata(metadata)
+    before: List[VersionInfo] = []
+    after: List[VersionInfo] = []
+    for vi in versions:
+        if vi.yanked and not options.allow_yanked:
+            continue
+        # Filter by Requires-Python if simulated
+        if options.python_version:
+            ok = False
+            if not vi.file_requires_python:
+                ok = True
+            else:
+                for rp in vi.file_requires_python:
+                    if not rp:
+                        ok = True
+                        break
+                    try:
+                        spec = SpecifierSet(rp)
+                        if spec.contains(options.python_version, prereleases=True):
+                            ok = True
+                            break
+                    except Exception:
+                        ok = True
+                        break
+            if not ok:
+                continue
+        if vi.first_upload_time <= cutoff_dt:
+            if vi.is_prerelease and not options.allow_pre:
+                continue
+            before.append(vi)
+        else:
+            if vi.is_prerelease and not options.allow_pre:
+                continue
+            after.append(vi)
+    if not before and not after:
+        return None
+
+    def distance(vi: VersionInfo) -> int:
+        return abs(int((vi.first_upload_time - cutoff_dt).total_seconds()))
+
+    # Prefer stable over pre when distances equal
+    def score(vi: VersionInfo) -> tuple:
+        return (distance(vi), vi.is_prerelease)
+
+    best_before = min(before, key=score) if before else None
+    best_after = min(after, key=score) if after else None
+
+    chosen: Optional[VersionInfo]
+    if best_before and best_after:
+        if score(best_before) <= score(best_after):
+            chosen = best_before
+        else:
+            chosen = best_after
+    else:
+        chosen = best_before or best_after
+
+    if not chosen:
+        return None
+    try:
+        return Version(chosen.version)
+    except InvalidVersion:
+        return None
+
+
 # Existing PackageIndex kept for list command
 class PackageIndex:
     def __init__(

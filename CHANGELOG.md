@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.1.6] - 2025-08-30
+
+### Added
+- Diagnose command to preflight environment and cutoff without installing.
+- --date-mode flag with `before` (default) and `nearest` (experimental) strategies.
+- --allow-source to opt out of binary-only behavior in historical mode.
+- Minimum Python suggestion derived from wheel tags or Requires-Python in conflict messages.
+
+### Changed
+- Improved EnvironmentCompatibilityError with optional extra hints; removed package-specific hints to keep guidance generic.
+- Smarter resolver messages now include “Latest allowed by cutoff” and “Requires-Python for <pkg>==<ver>”.
+- Optional cutoff: without --date pipt behaves like pip, still offering improved diagnostics.
+
+### Fixed
+- Robust parsing of pip --report schema variants.
+- Treat empty plans as “Nothing to do” instead of erroring.
+
 ## [0.1.5] - 2025-08-30
 
 ### Fixed

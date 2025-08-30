@@ -39,10 +39,19 @@ pipt lock django --date 2021-03-15 > requirements.lock
 pip install -r requirements.lock
 ```
 
+- No date? Behaves like pip:
+
+```bash
+pipt install requests  # passes through to pip install
+```
+
 ## Key Features
 
 - Reproducible builds tied to a specific date
-- Date-based resolution: choose the latest versions available on or before the cutoff
+- Optional cutoff: without `--date`, pipt behaves like pip
+- Date strategies: `--date-mode before` (default) or `--date-mode nearest`
+- Intelligent failure analysis with actionable messages
+- Preflight environment checks (Requires-Python, wheel tags) with Python version suggestions
 - Lockfile generation compatible with `pip`
 - Works with your existing workflows (constraints, pre-releases, yanked handling)
 - Polished CLI powered by `rich`
@@ -62,6 +71,8 @@ pipx install pipt
 ## How It Works
 
 `pipt` iteratively refines version constraints. It starts from your requested requirements, selects the latest releases that existed on the cutoff date, and runs `pip`'s resolver in a dry run. If transitive dependencies are too new, `pipt` tightens constraints and repeats until a historically accurate plan is found.
+
+It also performs a lightweight preflight check to surface environment incompatibilities early (e.g., no wheels for your Python/platform for the cutoff-era release) and will suggest the minimum Python version inferred from wheel filenames or Requires-Python.
 
 ## Usage
 
@@ -102,12 +113,22 @@ pipt lock django --date 2021-03-15 --include-hashes > requirements.lock
 pipt list requests --before 2020-01-01
 ```
 
+### Diagnose without installing
+
+```bash
+# See environment summary, latest allowed by cutoff, and wheel/Requires-Python info
+pipt diagnose numpy --date 2021-01-01
+```
+
 ### Handy options
 
 - `--pre`: allow pre-releases when needed
 - `--allow-yanked`: include yanked releases
 - `--python-version X.Y`: resolve as if running on Python X.Y (respects Requires-Python)
 - `-c constraints.txt`: layer your own constraints
+- `--allow-source`: in historical mode, permit building from source (disables binary-only)
+- `--date-mode nearest`: pick the version closest to the cutoff (experimental)
+- Global `-v`: show the exact pip command and raw output
 
 ## Compatibility
 

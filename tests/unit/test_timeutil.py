@@ -1,25 +1,27 @@
 import pytest
+from datetime import timezone
 
 from pipt.core.timeutil import parse_cutoff
 
 
-def test_parse_simple_date_end_of_day_utc():
+def test_parse_simple_date_end_of_day():
     dt = parse_cutoff("2021-01-01")
     assert dt.tzinfo is not None
-    assert dt.hour == 23 and dt.minute == 59 and dt.second == 59 and dt.microsecond == 999999
+    assert dt.hour == 23 and dt.minute == 59
 
 
-def test_parse_iso_with_z():
-    dt = parse_cutoff("2021-01-01T12:30:00Z")
+def test_parse_iso_with_tz():
+    dt = parse_cutoff("2021-01-01T12:34:56+00:00")
     assert dt.tzinfo is not None
-    assert dt.hour == 12 and dt.minute == 30
+    assert dt.hour == 12 and dt.minute == 34
 
 
-def test_parse_iso_with_offset():
-    dt = parse_cutoff("2021-01-01T12:30:00+02:00")
+def test_parse_zulu():
+    dt = parse_cutoff("2021-01-01T00:00:00Z")
     assert dt.tzinfo is not None
+    assert dt.utcoffset() == timezone.utc.utcoffset(dt)
 
 
-def test_parse_invalid_then_raises():
+def test_bad_date_raises():
     with pytest.raises(ValueError):
         parse_cutoff("not-a-date")

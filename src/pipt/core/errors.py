@@ -84,6 +84,7 @@ class EnvironmentCompatibilityError(PiptError):
         python_version: str,
         platform_str: str,
         details: str,
+        extra_hints: str | None = None,
     ):
         self.package = package
         self.latest_allowed = latest_allowed
@@ -101,6 +102,8 @@ class EnvironmentCompatibilityError(PiptError):
             "  2) Move the cutoff date forward to a release with modern wheels, or\n"
             "  3) Re-run with -v to see full pip output.\n"
         )
+        if extra_hints:
+            msg += f"\nHints:\n{extra_hints}\n"
         super().__init__(msg)
 
 

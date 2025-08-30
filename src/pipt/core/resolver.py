@@ -33,6 +33,200 @@ class ResolutionResult:
     plan_versions: Dict[str, Version]
 
 
+def _py_version_str(options: Options) -> str:
+    return options.python_version or f"{sys.version_info.major}.{sys.version_info.minor}"
+
+
+def _releases_support_python(meta: dict, up_to: Version, py_ver: str) -> bool:
+    try:
+        from packaging.version import Version as V
+    except Exception:
+        return True
+    rels = (meta or {}).get("releases", {}) or {}
+    for ver_str, files in rels.items():
+        try:
+            if V(ver_str) > up_to:
+                continue
+        except Exception:
+            continue
+        # If any file for this release has compatible Requires-Python (or none), accept
+        files = files or []
+        if not files:
+            # No file info; assume possibly compatible
+            return True
+        for f in files:
+            req = (f or {}).get("requires_python")
+            if not req:
+                return True
+            try:
+                spec = SpecifierSet(req)
+                if spec.contains(py_ver, prereleases=True):
+                    return True
+            except Exception:
+                # Be permissive on parse errors
+                return True
+    return False
+
+
+def _extract_conflict_summary(stderr: str) -> str:
+    lines = (stderr or "").splitlines()
+    keep: List[str] = []
+    capture = False
+    for ln in lines:
+        low = ln.lower().strip()
+        if "the conflict is caused by" in low or "because" in low and "depends on" in low:
+            capture = True
+        if capture:
+            # stop at empty separator or a common end marker
+            if not ln.strip():
+                if keep:
+                    break
+            keep.append(ln)
+        # also capture common requirement lines
+        if ("requires" in low and "python" in low) or ("depends on" in low and "<" in low):
+            keep.append(ln)
+    if not keep:
+        # fallback to last ~15 lines of stderr
+        keep = lines[-15:]
+    return "\n".join(keep).strip()
+
+
+def _parse_vmax_from_constraint(spec_str: Optional[str]) -> Optional[Version]:
+    if not spec_str:
+        return None
+    try:
+        ss = SpecifierSet(spec_str)
+        # Try to find a single <=X.Y.Z constraint
+        for sp in ss:
+            if sp.operator in ("<=", "=="):
+                try:
+                    return Version(sp.version)
+                except Exception:
+                    continue
+    except Exception:
+        return None
+    return None
+
+
+def _requires_python_for_version(meta: dict, ver: Version) -> List[str]:
+    rels = (meta or {}).get("releases", {}) or {}
+    specs: List[str] = []
+    files = rels.get(str(ver), []) or []
+    for f in files:
+        rp = (f or {}).get("requires_python")
+        if rp and rp not in specs:
+            specs.append(rp)
+    return specs
+
+
+def _wheel_python_tags_for_version(meta: dict, ver: Version) -> List[str]:
+    import re as _re
+
+    rels = (meta or {}).get("releases", {}) or {}
+    files = rels.get(str(ver), []) or []
+    tags: List[str] = []
+    for f in files:
+        fn = (f or {}).get("filename") or ""
+        # Wheel filename segments: name-version(-build)?-pyver-abi-plat.whl
+        # Extract python tag segment heuristically
+        parts = fn.split("-")
+        if len(parts) >= 4:
+            pyseg = parts[-3]
+        else:
+            # fallback: search cp3x in whole filename
+            pyseg = fn
+        for m in _re.findall(r"cp3(\d{1,2})", pyseg):
+            ver_minor = int(m)
+            tag = f"3.{ver_minor if ver_minor < 10 else int(str(ver_minor))}"
+            # Fix cp310+ mapping correctly (cp310 -> 3.10 etc.)
+            if ver_minor >= 10 and len(m) == 2:
+                tag = f"3.{m}"
+            if tag not in tags:
+                tags.append(tag)
+        if "py3" in pyseg and "3" not in tags:
+            tags.append("3")
+    # Sort ascending semantic
+    def _key(v: str) -> tuple:
+        try:
+            major, minor = v.split(".")
+            return (int(major), int(minor))
+        except Exception:
+            return (9_999, 9_999)
+    return sorted(tags, key=_key)
+
+
+def _suggest_python_from_specs(specs_or_meta, ver: Optional[Version] = None) -> Optional[str]:
+    # Accept both (list of spec strings) or (meta dict plus version)
+    if isinstance(specs_or_meta, dict) and ver is not None:
+        meta = specs_or_meta
+        wheel_pys = _wheel_python_tags_for_version(meta, ver)
+        for cand in wheel_pys:
+            if cand in ("3",):
+                continue
+            return cand
+        specs = _requires_python_for_version(meta, ver)
+    else:
+        specs = specs_or_meta  # type: ignore
+    from packaging.specifiers import SpecifierSet as _SS
+
+    mins: List[str] = []
+    for s in specs:
+        try:
+            ss = _SS(s)
+        except Exception:
+            continue
+        # try to extract minimal allowed 3.x
+        minv: Optional[Tuple[int, int]] = None
+        for sp in ss:
+            if sp.operator in (">=", ">="):
+                try:
+                    parts = sp.version.split(".")
+                    if len(parts) >= 2 and parts[0] == "3":
+                        cand = (3, int(parts[1]))
+                        if minv is None or cand > minv:
+                            minv = cand
+                except Exception:
+                    continue
+        if minv:
+            mins.append(f"{minv[0]}.{minv[1]}")
+    # Choose smallest suggested
+    if mins:
+        try:
+            return sorted(mins, key=lambda v: (int(v.split('.')[0]), int(v.split('.')[1])))[0]
+        except Exception:
+            return mins[0]
+    return None
+
+
+def _suggest_python_from_specs_or_wheels(meta: dict, ver: Version) -> Optional[str]:
+    wheel_pys = _wheel_python_tags_for_version(meta, ver)
+    for cand in wheel_pys:
+        if cand in ("3",):
+            continue
+        return cand
+    specs = _requires_python_for_version(meta, ver)
+    return _suggest_python_from_specs(specs)
+
+
+def _suggestions_for_conflict(target_pkg: Optional[str], constraint_str: Optional[str], options: Options) -> str:
+    pyv, plat = _environment_summary(options)
+    tips = [
+        "- Move the cutoff date forward to include newer compatible releases.",
+        "- Try allowing pre-releases with --pre if appropriate.",
+        "- Consider using an older Python interpreter that matches the cutoff era.",
+        "- If you know what you’re doing, install without dependencies: try: pipt install <pkg> --date <date> --no-deps (not recommended).",
+        "- Add or adjust a constraints file (-c) to pin transitive dependencies to versions available before the cutoff.",
+        "- Re-run with -v to see the exact pip command and full resolver output.",
+    ]
+    head = [
+        "Dependency conflict detected by pip's resolver.",
+        f"Environment: Python {pyv} / {plat}.",
+    ]
+    if target_pkg and constraint_str:
+        head.append(f"Requested: {target_pkg}{constraint_str}")
+    return "\n".join(head + ["", "Suggestions:"] + tips)
+
+
 def _pip_version_check():
     out = subprocess.check_output([sys.executable, "-m", "pip", "--version"], text=True)
     # e.g., "pip 25.2 from ..."
@@ -72,10 +266,16 @@ def _pip_base_args(
     if options and options.user_constraint_files:
         for c in options.user_constraint_files:
             args += ["-c", c]
+    # Only force binary wheels when requested (historical mode)
+    if options is None or options.binary_only:
+        args += [
+            "--prefer-binary",
+            "--only-binary",
+            ":all:",
+        ]
+    if options and options.no_deps:
+        args += ["--no-deps"]
     args += [
-        "--prefer-binary",
-        "--only-binary",
-        ":all:",
         "--disable-pip-version-check",
         "--no-input",
     ]
@@ -90,6 +290,9 @@ def _classify_pip_error(stderr: str) -> str:
     msg = (stderr or "").lower()
     if not msg:
         return "unknown"
+    # Treat any Requires-Python indication as environment incompatibility
+    if "requires-python" in msg or "python version" in msg:
+        return "env"
     if "resolutionimpossible" in msg or "conflicting dependencies" in msg:
         return "conflict"
     if (
@@ -118,7 +321,7 @@ def _environment_summary(options: Options) -> Tuple[str, str]:
 
 
 def _run_pip_dry_run(
-    target_args: List[str], constraints_file: Path, report_file: Path, options: Options
+    target_args: List[str], constraints_file: Optional[Path], report_file: Path, options: Options
 ) -> Tuple[int, str, str]:
     cmd = _pip_base_args(report_file, constraints_file, options) + target_args
     _verbose_print(options, f"Running pip: {' '.join(cmd)}")
@@ -162,9 +365,41 @@ def _parse_plan(report_path: Path) -> Dict[str, Version]:
 
 
 async def resolve_dependency_plan(
-    targets: List[Requirement], cutoff_dt: datetime, options: Options
+    targets: List[Requirement], cutoff_dt: Optional[datetime], options: Options
 ) -> ResolutionResult:
     _pip_version_check()
+
+    # If no cutoff is supplied, do a single dry-run with pip and return the plan.
+    if cutoff_dt is None:
+        with tempfile.TemporaryDirectory() as td:
+            rfile = Path(td) / "report.json"
+            target_args = [str(r) for r in targets]
+            code, out, err = _run_pip_dry_run(target_args, None, rfile, options)
+            if code != 0:
+                classification = _classify_pip_error(err or out)
+                first_target = targets[0].name if targets else None
+                if classification == "conflict":
+                    summary = _extract_conflict_summary(err or out)
+                    msg = _suggestions_for_conflict(first_target, None, options)
+                    raise ResolutionConflictError(f"{summary}\n\n{msg}")
+                if classification == "env":
+                    pyv, plat = _environment_summary(options)
+                    raise EnvironmentCompatibilityError(
+                        package=first_target,
+                        latest_allowed=None,
+                        python_version=pyv,
+                        platform_str=plat,
+                        details=(err or out),
+                        extra_hints=None,
+                    )
+                if classification == "source":
+                    raise SourceBuildError(package=first_target, details=(err or out))
+                raise PipSubprocessError(code, (err or out))
+            plan = _parse_plan(rfile)
+            if not plan:
+                _verbose_print(options, "Empty plan from pip report: nothing to do (already satisfied)")
+                return ResolutionResult(constraints={}, plan_versions={})
+            return ResolutionResult(constraints={}, plan_versions=plan)
 
     constraints: Dict[str, SpecifierSet] = {}
 
@@ -176,11 +411,47 @@ async def resolve_dependency_plan(
             cache_dir=options.cache_dir,
             verbose=options.verbose,
         )
+        # Support date_mode
+        if options.date_mode == "nearest":
+            from .index import get_nearest_for_package  # local import to avoid cycle
+
+            nearest = await get_nearest_for_package(meta, cutoff_dt, options)
+            if nearest is None:
+                raise ResolutionConflictError(
+                    f"No versions of {req.name} near cutoff {cutoff_dt.isoformat()} for the given options",
+                    package=req.name,
+                )
+            cap = SpecifierSet(f"=={nearest}")
+            constraints[req.name.lower()] = cap
+            _verbose_print(options, f"Seed(nearest) {req.name}: =={nearest}")
+            return
+
         vmax = await get_vmax_for_package(meta, cutoff_dt, options)
         if vmax is None:
             raise ResolutionConflictError(
                 f"No versions of {req.name} are available on or before cutoff {cutoff_dt.isoformat()} for the given options",
                 package=req.name,
+            )
+        # Pre-check Python compatibility of releases up to vmax to avoid opaque conflicts
+        py_str = _py_version_str(options)
+        if not _releases_support_python(meta, vmax, py_str):
+            pyv, plat = _environment_summary(options)
+            # Try to suggest a minimum Python from wheels/specs
+            py_suggest = _suggest_python_from_specs_or_wheels(meta, vmax)
+            hints: List[str] = []
+            if py_suggest:
+                hints.append(f"Minimum suggested Python for {req.name}=={vmax}: {py_suggest}")
+            extra = "\n".join(hints) if hints else None
+            raise EnvironmentCompatibilityError(
+                package=req.name,
+                latest_allowed=f"<={vmax}",
+                python_version=pyv,
+                platform_str=plat,
+                details=(
+                    f"No releases of {req.name} up to {vmax} declare compatibility with Python {py_str}. "
+                    "Use an older Python (e.g., 3.10/3.11 for early 2023 NumPy) or move the cutoff forward."
+                ),
+                extra_hints=extra,
             )
         cap = SpecifierSet(f"<={vmax}")
         combined = str(req.specifier & cap)
@@ -209,7 +480,33 @@ async def resolve_dependency_plan(
                 first_target = targets[0].name if targets else None
                 first_constraint = str(constraints.get(first_target or "", "")) if first_target else None
                 if classification == "conflict":
-                    raise ResolutionConflictError((err or out).strip())
+                    summary = _extract_conflict_summary(err or out)
+                    # Enrich with specific version and Python suggestion
+                    vmax = _parse_vmax_from_constraint(first_constraint)
+                    extra_lines: List[str] = []
+                    if first_target and vmax is not None:
+                        try:
+                            meta = await fetch_package_metadata(
+                                first_target,
+                                options.index_url,
+                                ttl_seconds=options.cache_ttl_seconds,
+                                cache_dir=options.cache_dir,
+                                verbose=options.verbose,
+                            )
+                            rps = _requires_python_for_version(meta, vmax)
+                            rp_disp = "; ".join(rps) if rps else None
+                            if rp_disp:
+                                extra_lines.append(f"Requires-Python for {first_target}=={vmax}: {rp_disp}")
+                            py_suggest = _suggest_python_from_specs_or_wheels(meta, vmax)
+                            if py_suggest:
+                                extra_lines.append(f"Suggested Python version: {py_suggest}")
+                            extra_lines.append(f"Latest allowed by cutoff: {first_target}=={vmax}")
+                        except Exception:
+                            if vmax is not None:
+                                extra_lines.append(f"Latest allowed by cutoff: {first_target}=={vmax}")
+                    msg = _suggestions_for_conflict(first_target, first_constraint, options)
+                    detail = ("\n".join(extra_lines) + "\n\n" if extra_lines else "")
+                    raise ResolutionConflictError(f"{summary}\n\n{detail}{msg}")
                 if classification == "env":
                     pyv, plat = _environment_summary(options)
                     raise EnvironmentCompatibilityError(
@@ -218,6 +515,7 @@ async def resolve_dependency_plan(
                         python_version=pyv,
                         platform_str=plat,
                         details=(err or out),
+                        extra_hints=None,
                     )
                 if classification == "source":
                     raise SourceBuildError(package=first_target, details=(err or out))
@@ -225,9 +523,8 @@ async def resolve_dependency_plan(
                 raise PipSubprocessError(code, (err or out))
             last_plan = _parse_plan(rfile)
             if not last_plan:
-                raise MetadataError(
-                    "Empty plan from pip report; unexpected report schema or pip version"
-                )
+                _verbose_print(options, "Empty plan from pip report: nothing to do (already satisfied)")
+                return ResolutionResult(constraints=constraints, plan_versions={})
 
             violations: Dict[str, Version] = {}
             # Parallel fetch of metadata for plan packages
@@ -272,7 +569,7 @@ async def resolve_dependency_plan(
 
 def run_final_pip_install(
     target_args: List[str],
-    constraints_file: Path,
+    constraints_file: Optional[Path],
     options: Options,
     latest_constraints: Optional[Dict[str, SpecifierSet]] = None,
 ) -> int:
@@ -308,7 +605,15 @@ def run_final_pip_install(
         if latest_constraints and pkg_name:
             latest_allowed = str(latest_constraints.get(pkg_name.lower(), "")) or None
         if classification == "conflict":
-            raise ResolutionConflictError(err_out.strip())
+            summary = _extract_conflict_summary(err_out)
+            extra_lines: List[str] = []
+            vmax = _parse_vmax_from_constraint(latest_allowed)
+            if pkg_name and vmax is not None:
+                # Non-async context: avoid fetching metadata here
+                extra_lines.append(f"Latest allowed by cutoff: {pkg_name}=={vmax}")
+            msg = _suggestions_for_conflict(pkg_name, latest_allowed, options)
+            detail = ("\n".join(extra_lines) + "\n\n" if extra_lines else "")
+            raise ResolutionConflictError(f"{summary}\n\n{detail}{msg}")
         if classification == "env":
             pyv, plat = _environment_summary(options)
             raise EnvironmentCompatibilityError(
@@ -317,6 +622,7 @@ def run_final_pip_install(
                 python_version=pyv,
                 platform_str=plat,
                 details=err_out,
+                extra_hints=None,
             )
         if classification == "source":
             raise SourceBuildError(package=pkg_name, details=err_out)
@@ -325,12 +631,19 @@ def run_final_pip_install(
 
 
 def write_lockfile(
-    path: Path, plan: Dict[str, Version], cutoff: datetime, include_hashes: bool = False
+    path: Path, plan: Dict[str, Version], cutoff: Optional[datetime], include_hashes: bool = False
 ) -> None:
-    header = [
-        f"# Locked by pipt on {datetime.utcnow().date()} for cutoff {cutoff.date()}\n",
-        "# Do not edit by hand.\n",
-    ]
+    header = []
+    if cutoff is None:
+        header = [
+            f"# Locked by pipt on {datetime.utcnow().date()} (no cutoff provided)\n",
+            "# Do not edit by hand.\n",
+        ]
+    else:
+        header = [
+            f"# Locked by pipt on {datetime.utcnow().date()} for cutoff {cutoff.date()}\n",
+            "# Do not edit by hand.\n",
+        ]
     lines: List[str] = []
 
     if include_hashes:
