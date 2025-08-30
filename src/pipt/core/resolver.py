@@ -17,7 +17,6 @@ from packaging.version import Version
 from .errors import (
     ResolutionConflictError,
     ResolutionTimeoutError,
-    MetadataError,
     PipSubprocessError,
     OldPipError,
     EnvironmentCompatibilityError,
