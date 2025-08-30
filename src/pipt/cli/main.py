@@ -31,10 +31,14 @@ def main_opts(verbose: bool = typer.Option(False, "-v", "--verbose", help="Show 
 @app.command(help="List package versions up to a date")
 def list(
     package: str = typer.Argument(..., help="Package name"),
-    before: str = typer.Option(..., "--before", help="Date (YYYY-MM-DD or ISO8601, naive treated as UTC end-of-day)"),
+    before: str = typer.Option(
+        ..., "--before", help="Date (YYYY-MM-DD or ISO8601, naive treated as UTC end-of-day)"
+    ),
     pre: bool = typer.Option(False, "--pre", help="Include pre-releases"),
     allow_yanked: bool = typer.Option(False, "--allow-yanked", help="Include yanked versions"),
-    python_version: Optional[str] = typer.Option(None, "--python-version", help="Simulate Python version X.Y for Requires-Python filtering"),
+    python_version: Optional[str] = typer.Option(
+        None, "--python-version", help="Simulate Python version X.Y for Requires-Python filtering"
+    ),
 ):
     cutoff = parse_cutoff(before)
     idx = PackageIndex()
@@ -68,7 +72,9 @@ def list(
     console.print(table)
 
 
-def _build_options(pre: bool, allow_yanked: bool, python_version: Optional[str], constraint: List[str]) -> Options:
+def _build_options(
+    pre: bool, allow_yanked: bool, python_version: Optional[str], constraint: List[str]
+) -> Options:
     return Options(
         allow_pre=pre,
         allow_yanked=allow_yanked,
@@ -84,7 +90,9 @@ def resolve(
     date: str = typer.Option(..., "--date", help="Cutoff date (YYYY-MM-DD or ISO8601)"),
     pre: bool = typer.Option(False, "--pre", help="Include pre-releases when necessary"),
     allow_yanked: bool = typer.Option(False, "--allow-yanked", help="Include yanked versions"),
-    python_version: Optional[str] = typer.Option(None, "--python-version", help="Simulate Python version X.Y"),
+    python_version: Optional[str] = typer.Option(
+        None, "--python-version", help="Simulate Python version X.Y"
+    ),
     constraint: List[str] = typer.Option([], "-c", help="User constraint file(s) to layer"),
     json_out: bool = typer.Option(False, "--json", help="Output JSON"),
 ):
@@ -129,7 +137,9 @@ def install(
     date: str = typer.Option(..., "--date", help="Cutoff date (YYYY-MM-DD or ISO8601)"),
     pre: bool = typer.Option(False, "--pre", help="Include pre-releases when necessary"),
     allow_yanked: bool = typer.Option(False, "--allow-yanked", help="Include yanked versions"),
-    python_version: Optional[str] = typer.Option(None, "--python-version", help="Simulate Python version X.Y"),
+    python_version: Optional[str] = typer.Option(
+        None, "--python-version", help="Simulate Python version X.Y"
+    ),
     constraint: List[str] = typer.Option([], "-c", help="User constraint file(s) to layer"),
 ):
     cutoff = parse_cutoff(date)
@@ -159,11 +169,17 @@ def install(
 def lock(
     targets: List[str] = typer.Argument(..., help="One or more requirements"),
     date: str = typer.Option(..., "--date", help="Cutoff date (YYYY-MM-DD or ISO8601)"),
-    output: Path = typer.Option(Path("lockfile.txt"), "-o", "--output", help="Output lockfile path"),
-    include_hashes: bool = typer.Option(False, "--include-hashes", help="Include hashes (experimental)"),
+    output: Path = typer.Option(
+        Path("lockfile.txt"), "-o", "--output", help="Output lockfile path"
+    ),
+    include_hashes: bool = typer.Option(
+        False, "--include-hashes", help="Include hashes (experimental)"
+    ),
     pre: bool = typer.Option(False, "--pre", help="Include pre-releases when necessary"),
     allow_yanked: bool = typer.Option(False, "--allow-yanked", help="Include yanked versions"),
-    python_version: Optional[str] = typer.Option(None, "--python-version", help="Simulate Python version X.Y"),
+    python_version: Optional[str] = typer.Option(
+        None, "--python-version", help="Simulate Python version X.Y"
+    ),
     constraint: List[str] = typer.Option([], "-c", help="User constraint file(s) to layer"),
 ):
     cutoff = parse_cutoff(date)

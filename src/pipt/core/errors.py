@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 class PiptError(Exception):
     """Base exception for pipt."""
 
@@ -16,7 +17,14 @@ class MetadataError(PiptError):
 
 
 class CutoffViolationError(PiptError):
-    def __init__(self, pkg: str, chosen: str, chosen_date: str | None, vmax: str | None, vmax_date: str | None):
+    def __init__(
+        self,
+        pkg: str,
+        chosen: str,
+        chosen_date: str | None,
+        vmax: str | None,
+        vmax_date: str | None,
+    ):
         self.pkg = pkg
         self.chosen = chosen
         self.chosen_date = chosen_date

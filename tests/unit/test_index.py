@@ -68,9 +68,7 @@ def test_vmax_requires_python():
             "1.0.0": [
                 {"upload_time_iso_8601": "2020-01-01T00:00:00Z", "requires_python": ">=3.10"}
             ],
-            "1.1.0": [
-                {"upload_time_iso_8601": "2020-01-02T00:00:00Z", "requires_python": ">=3.6"}
-            ],
+            "1.1.0": [{"upload_time_iso_8601": "2020-01-02T00:00:00Z", "requires_python": ">=3.6"}],
         }
     )
     cutoff = dt("2020-01-03T00:00:00Z")

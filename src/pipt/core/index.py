@@ -41,7 +41,14 @@ class VersionInfo:
         return ", ".join(parts)
 
 
-async def fetch_package_metadata(package_name: str, index_url: str, *, ttl_seconds: int = 86400, cache_dir: Optional[str] = None, verbose: bool = False) -> Dict[str, Any]:
+async def fetch_package_metadata(
+    package_name: str,
+    index_url: str,
+    *,
+    ttl_seconds: int = 86400,
+    cache_dir: Optional[str] = None,
+    verbose: bool = False,
+) -> Dict[str, Any]:
     cache = Cache(cache_dir or ".cache/pipt-index")
     cache_key = (index_url, package_name.lower())
     try:
@@ -119,16 +126,20 @@ async def _collect_versions_from_metadata(metadata: Dict[str, Any]) -> List[Vers
         if first_time is None:
             continue
         results.append(VersionInfo(ver, first_time, file_requires, any_yanked))
+
     def ver_key(v: VersionInfo):
         try:
             return Version(v.version)
         except InvalidVersion:
             return Version("0")
+
     results.sort(key=ver_key)
     return results
 
 
-async def get_vmax_for_package(metadata: Dict[str, Any], cutoff_dt: datetime, options: Options) -> Optional[Version]:
+async def get_vmax_for_package(
+    metadata: Dict[str, Any], cutoff_dt: datetime, options: Options
+) -> Optional[Version]:
     versions = await _collect_versions_from_metadata(metadata)
 
     candidates: List[VersionInfo] = []
@@ -186,7 +197,12 @@ async def get_vmax_for_package(metadata: Dict[str, Any], cutoff_dt: datetime, op
 
 # Existing PackageIndex kept for list command
 class PackageIndex:
-    def __init__(self, index_url: Optional[str] = None, cache_dir: Optional[str] = None, ttl_seconds: int = 86400):
+    def __init__(
+        self,
+        index_url: Optional[str] = None,
+        cache_dir: Optional[str] = None,
+        ttl_seconds: int = 86400,
+    ):
         self.index_url = index_url or PYPI_JSON_URL
         self.cache = Cache(cache_dir or ".cache/pipt-index")
         self.ttl = ttl_seconds
@@ -274,10 +290,12 @@ class PackageIndex:
             return None
         stables = [vi for vi in candidates if not vi.is_prerelease]
         pool = candidates if include_prereleases or not stables else stables
+
         def ver_key(v: VersionInfo):
             try:
                 return Version(v.version)
             except InvalidVersion:
                 return Version("0")
+
         best = max(pool, key=ver_key)
         return best.version, best.first_upload_time

@@ -14,7 +14,13 @@ from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 
-from .errors import ResolutionConflictError, ResolutionTimeoutError, MetadataError, PipSubprocessError, OldPipError
+from .errors import (
+    ResolutionConflictError,
+    ResolutionTimeoutError,
+    MetadataError,
+    PipSubprocessError,
+    OldPipError,
+)
 from .index import fetch_package_metadata, get_vmax_for_package
 from .options import Options
 
@@ -51,7 +57,11 @@ def _write_constraints_file(path: Path, constraints: Dict[str, SpecifierSet]) ->
             f.write(f"{name}{spec}\n" if str(spec) else f"{name}\n")
 
 
-def _pip_base_args(report_file: Optional[Path] = None, constraints_file: Optional[Path] = None, options: Optional[Options] = None) -> List[str]:
+def _pip_base_args(
+    report_file: Optional[Path] = None,
+    constraints_file: Optional[Path] = None,
+    options: Optional[Options] = None,
+) -> List[str]:
     args = [sys.executable, "-m", "pip", "install"]
     if report_file is not None:
         args += ["--dry-run", "--report", str(report_file)]
@@ -60,11 +70,19 @@ def _pip_base_args(report_file: Optional[Path] = None, constraints_file: Optiona
     if options and options.user_constraint_files:
         for c in options.user_constraint_files:
             args += ["-c", c]
-    args += ["--prefer-binary", "--only-binary", ":all:", "--disable-pip-version-check", "--no-input"]
+    args += [
+        "--prefer-binary",
+        "--only-binary",
+        ":all:",
+        "--disable-pip-version-check",
+        "--no-input",
+    ]
     return args
 
 
-def _run_pip_dry_run(target_args: List[str], constraints_file: Path, report_file: Path, options: Options) -> Tuple[int, str, str]:
+def _run_pip_dry_run(
+    target_args: List[str], constraints_file: Path, report_file: Path, options: Options
+) -> Tuple[int, str, str]:
     cmd = _pip_base_args(report_file, constraints_file, options) + target_args
     _verbose_print(options, f"Running pip: {' '.join(cmd)}")
     proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -99,14 +117,20 @@ def _parse_plan(report_path: Path) -> Dict[str, Version]:
     return plan
 
 
-async def resolve_dependency_plan(targets: List[Requirement], cutoff_dt: datetime, options: Options) -> ResolutionResult:
+async def resolve_dependency_plan(
+    targets: List[Requirement], cutoff_dt: datetime, options: Options
+) -> ResolutionResult:
     _pip_version_check()
 
     constraints: Dict[str, SpecifierSet] = {}
 
     async def seed_for_target(req: Requirement) -> None:
         meta = await fetch_package_metadata(
-            req.name, options.index_url, ttl_seconds=options.cache_ttl_seconds, cache_dir=options.cache_dir, verbose=options.verbose
+            req.name,
+            options.index_url,
+            ttl_seconds=options.cache_ttl_seconds,
+            cache_dir=options.cache_dir,
+            verbose=options.verbose,
         )
         vmax = await get_vmax_for_package(meta, cutoff_dt, options)
         if vmax is None:
@@ -129,7 +153,10 @@ async def resolve_dependency_plan(targets: List[Requirement], cutoff_dt: datetim
             cfile = Path(td) / "constraints.txt"
             rfile = Path(td) / "report.json"
             _write_constraints_file(cfile, constraints)
-            _verbose_print(options, f"Loop {loop_idx}: constraints -> {[f'{k}{v}' for k,v in constraints.items()]}")
+            _verbose_print(
+                options,
+                f"Loop {loop_idx}: constraints -> {[f'{k}{v}' for k, v in constraints.items()]}",
+            )
             target_args = [str(r) for r in targets]
             code, out, err = _run_pip_dry_run(target_args, cfile, rfile, options)
             if code != 0:
@@ -140,7 +167,9 @@ async def resolve_dependency_plan(targets: List[Requirement], cutoff_dt: datetim
                 raise PipSubprocessError(code, msg)
             last_plan = _parse_plan(rfile)
             if not last_plan:
-                raise MetadataError("Empty plan from pip report; unexpected report schema or pip version")
+                raise MetadataError(
+                    "Empty plan from pip report; unexpected report schema or pip version"
+                )
 
             violations: Dict[str, Version] = {}
             # Parallel fetch of metadata for plan packages
@@ -148,7 +177,11 @@ async def resolve_dependency_plan(targets: List[Requirement], cutoff_dt: datetim
 
             async def vmax_for(name: str) -> Tuple[str, Optional[Version]]:
                 meta = await fetch_package_metadata(
-                    name, options.index_url, ttl_seconds=options.cache_ttl_seconds, cache_dir=options.cache_dir, verbose=options.verbose
+                    name,
+                    options.index_url,
+                    ttl_seconds=options.cache_ttl_seconds,
+                    cache_dir=options.cache_dir,
+                    verbose=options.verbose,
                 )
                 vmax = await get_vmax_for_package(meta, cutoff_dt, options)
                 return name, vmax
@@ -193,7 +226,9 @@ def run_final_pip_install(target_args: List[str], constraints_file: Path, option
     return code
 
 
-def write_lockfile(path: Path, plan: Dict[str, Version], cutoff: datetime, include_hashes: bool = False) -> None:
+def write_lockfile(
+    path: Path, plan: Dict[str, Version], cutoff: datetime, include_hashes: bool = False
+) -> None:
     header = [
         f"# Locked by pipt on {datetime.utcnow().date()} for cutoff {cutoff.date()}\n",
         "# Do not edit by hand.\n",
@@ -201,6 +236,7 @@ def write_lockfile(path: Path, plan: Dict[str, Version], cutoff: datetime, inclu
     lines: List[str] = []
 
     if include_hashes:
+
         async def gather_hashes() -> Dict[str, List[str]]:
             async def hashes_for(name: str, ver: Version) -> Tuple[str, List[str]]:
                 meta = await fetch_package_metadata(name, Options().index_url)
