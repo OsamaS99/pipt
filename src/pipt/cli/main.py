@@ -20,16 +20,18 @@ from packaging.requirements import Requirement
 
 app = typer.Typer(add_completion=False)
 console = Console()
+VERBOSE: bool = False
 
 
 @app.callback()
 def main_opts(verbose: bool = typer.Option(False, "-v", "--verbose", help="Show verbose logs")):
+    global VERBOSE
     typer.get_app_dir("pipt")  # warm app dir
-    app.extra["verbose"] = verbose
+    VERBOSE = verbose
 
 
-@app.command(help="List package versions up to a date")
-def list(
+@app.command(name="list", help="List package versions up to a date")
+def list_cmd(
     package: str = typer.Argument(..., help="Package name"),
     before: str = typer.Option(
         ..., "--before", help="Date (YYYY-MM-DD or ISO8601, naive treated as UTC end-of-day)"
@@ -79,8 +81,8 @@ def _build_options(
         allow_pre=pre,
         allow_yanked=allow_yanked,
         python_version=python_version,
-        verbose=bool(app.extra.get("verbose")),
-        user_constraint_files=list(constraint),
+        verbose=bool(VERBOSE),
+        user_constraint_files=constraint.copy(),
     )
 
 
