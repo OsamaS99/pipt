@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.4] - 2025-08-30
+
+### Added
+- Intelligent failure analysis for pip errors:
+  - Detects environment compatibility issues (no matching wheel) and source build failures.
+  - Provides actionable guidance (try older Python, move cutoff forward, or use -v for details).
+- Verbose mode now prints the exact pip command and dumps raw stdout/stderr for dry-run and install.
+
+### Changed
+- More informative error panels in CLI with concise hints.
+
+### Fixed
+- Minor robustness improvements in resolver error handling.
+
 ## [0.1.3] - 2025-08-30
 
 This is the first public baseline release of pipt. It consolidates all prior work and sets up automated publishing.

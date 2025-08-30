@@ -20,6 +20,8 @@ from .errors import (
     MetadataError,
     PipSubprocessError,
     OldPipError,
+    EnvironmentCompatibilityError,
+    SourceBuildError,
 )
 from .index import fetch_package_metadata, get_vmax_for_package
 from .options import Options
@@ -80,12 +82,54 @@ def _pip_base_args(
     return args
 
 
+def _classify_pip_error(stderr: str) -> str:
+    """Return a classification label for pip failure based on stderr content.
+
+    Returns one of: 'conflict', 'env', 'source', 'unknown'
+    """
+    msg = (stderr or "").lower()
+    if not msg:
+        return "unknown"
+    if "resolutionimpossible" in msg or "conflicting dependencies" in msg:
+        return "conflict"
+    if (
+        "no matching distribution found" in msg
+        or "could not find a version that satisfies the requirement" in msg
+        or "is not a supported wheel on this platform" in msg
+        or "ignored the following versions that require a different python version" in msg
+    ):
+        return "env"
+    if (
+        "failed building wheel for" in msg
+        or "building wheel for" in msg and "did not run successfully" in msg
+        or "error: subprocess-exited-with-error" in msg
+        or "build failed" in msg
+    ):
+        return "source"
+    return "unknown"
+
+
+def _environment_summary(options: Options) -> Tuple[str, str]:
+    import platform
+
+    py_ver = options.python_version or f"{sys.version_info.major}.{sys.version_info.minor}"
+    plat = f"{sys.platform}-{platform.machine()}"
+    return py_ver, plat
+
+
 def _run_pip_dry_run(
     target_args: List[str], constraints_file: Path, report_file: Path, options: Options
 ) -> Tuple[int, str, str]:
     cmd = _pip_base_args(report_file, constraints_file, options) + target_args
     _verbose_print(options, f"Running pip: {' '.join(cmd)}")
     proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if options.verbose:
+        if proc.stdout:
+            _verbose_print(options, "----- pip stdout (dry-run) -----")
+            print(proc.stdout, end="")
+        if proc.stderr:
+            _verbose_print(options, "----- pip stderr (dry-run) -----")
+            print(proc.stderr, end="")
     return proc.returncode, proc.stdout, proc.stderr
 
 
@@ -160,11 +204,25 @@ async def resolve_dependency_plan(
             target_args = [str(r) for r in targets]
             code, out, err = _run_pip_dry_run(target_args, cfile, rfile, options)
             if code != 0:
-                # If looks like dependency conflict, raise ResolutionConflictError, else PipSubprocessError
-                msg = (err or out).strip()
-                if "ResolutionImpossible" in msg or "conflicting dependencies" in msg:
-                    raise ResolutionConflictError(msg)
-                raise PipSubprocessError(code, msg)
+                # Intelligent failure analysis
+                classification = _classify_pip_error(err or out)
+                first_target = targets[0].name if targets else None
+                first_constraint = str(constraints.get(first_target or "", "")) if first_target else None
+                if classification == "conflict":
+                    raise ResolutionConflictError((err or out).strip())
+                if classification == "env":
+                    pyv, plat = _environment_summary(options)
+                    raise EnvironmentCompatibilityError(
+                        package=first_target,
+                        latest_allowed=first_constraint,
+                        python_version=pyv,
+                        platform_str=plat,
+                        details=(err or out),
+                    )
+                if classification == "source":
+                    raise SourceBuildError(package=first_target, details=(err or out))
+                # Unknown
+                raise PipSubprocessError(code, (err or out))
             last_plan = _parse_plan(rfile)
             if not last_plan:
                 raise MetadataError(
@@ -212,16 +270,56 @@ async def resolve_dependency_plan(
     raise ResolutionTimeoutError(max_iter)
 
 
-def run_final_pip_install(target_args: List[str], constraints_file: Path, options: Options) -> int:
+def run_final_pip_install(
+    target_args: List[str],
+    constraints_file: Path,
+    options: Options,
+    latest_constraints: Optional[Dict[str, SpecifierSet]] = None,
+) -> int:
     cmd = _pip_base_args(None, constraints_file, options) + target_args
-    # Stream output live
+    _verbose_print(options, f"Running pip: {' '.join(cmd)}")
+    # Stream output live but also capture for verbose dumps and errors
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     assert proc.stdout and proc.stderr
+    stdout_buf: List[str] = []
     for line in proc.stdout:
+        stdout_buf.append(line)
         print(line, end="")
     err_out = proc.stderr.read()
     code = proc.wait()
+    if options.verbose:
+        if stdout_buf:
+            _verbose_print(options, "----- pip stdout (install) -----")
+            print("".join(stdout_buf), end="")
+        if err_out:
+            _verbose_print(options, "----- pip stderr (install) -----")
+            print(err_out, end="")
     if code != 0:
+        classification = _classify_pip_error(err_out)
+        # Try to infer a primary target
+        pkg_name: Optional[str] = None
+        try:
+            first = target_args[0]
+            if first and not first.startswith("-r"):
+                pkg_name = Requirement(first).name
+        except Exception:
+            pkg_name = None
+        latest_allowed: Optional[str] = None
+        if latest_constraints and pkg_name:
+            latest_allowed = str(latest_constraints.get(pkg_name.lower(), "")) or None
+        if classification == "conflict":
+            raise ResolutionConflictError(err_out.strip())
+        if classification == "env":
+            pyv, plat = _environment_summary(options)
+            raise EnvironmentCompatibilityError(
+                package=pkg_name,
+                latest_allowed=latest_allowed,
+                python_version=pyv,
+                platform_str=plat,
+                details=err_out,
+            )
+        if classification == "source":
+            raise SourceBuildError(package=pkg_name, details=err_out)
         raise PipSubprocessError(code, err_out)
     return code
 

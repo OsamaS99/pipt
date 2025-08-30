@@ -71,3 +71,48 @@ class OldPipError(PiptError):
             f"pipt requires pip >= 23.0 for --report. Detected pip {version}. Please run 'pip install --upgrade pip'."
         )
         self.version = version
+
+
+class EnvironmentCompatibilityError(PiptError):
+    """Raised when pip cannot find any compatible distributions for the environment."""
+
+    def __init__(
+        self,
+        *,
+        package: str | None,
+        latest_allowed: str | None,
+        python_version: str,
+        platform_str: str,
+        details: str,
+    ):
+        self.package = package
+        self.latest_allowed = latest_allowed
+        self.python_version = python_version
+        self.platform_str = platform_str
+        self.details = details
+        # Compose a concise, helpful message
+        pkg_line = f"for {package} (latest allowed {latest_allowed})" if package and latest_allowed else (f"for {package}" if package else "for requested packages")
+        msg = (
+            "Environment compatibility issue: pip could not find a compatible distribution "
+            f"{pkg_line} on Python {python_version} / {platform_str}.\n"
+            "This typically happens when pre-built wheels do not exist for such an old release on a modern setup.\n"
+            "Suggestions:\n"
+            "  1) Use an older Python (e.g., 3.9) that matches the cutoff era, or\n"
+            "  2) Move the cutoff date forward to a release with modern wheels, or\n"
+            "  3) Re-run with -v to see full pip output.\n"
+        )
+        super().__init__(msg)
+
+
+class SourceBuildError(PiptError):
+    """Raised when pip attempts and fails to build from source for the target package."""
+
+    def __init__(self, *, package: str | None, details: str):
+        self.package = package
+        self.details = details
+        msg = (
+            "Source build failed: pip attempted to build from source but encountered errors.\n"
+            "Typical fixes: ensure required build tools are installed (e.g., compilers), or choose a cutoff date "
+            "with available wheels, or use a Python/version combo with wheels available.\n"
+        )
+        super().__init__(msg)

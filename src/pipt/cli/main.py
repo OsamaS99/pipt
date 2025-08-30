@@ -161,9 +161,11 @@ def install(
         _write_constraints_file(cfile, result.constraints)
         console.print("Running pip install...")
         try:
-            run_final_pip_install([str(r) for r in reqs], cfile, opts)
+            run_final_pip_install([str(r) for r in reqs], cfile, opts, latest_constraints=result.constraints)
         except PiptError as e:
+            # Present a concise, actionable message
             console.print(Panel.fit(str(e), title="pip install failed", border_style="red"))
+            console.print("Tip: run again with -v to see the full pip command and output.")
             raise typer.Exit(code=1)
 
 
