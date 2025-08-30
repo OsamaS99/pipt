@@ -1,8 +1,6 @@
 import subprocess
 import sys
 
-import pytest
-
 
 def run_cmd(args):
     cmd = [sys.executable, "-m", "pipt.cli.main"] + args

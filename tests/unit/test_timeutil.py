@@ -1,5 +1,3 @@
-from datetime import timezone
-
 import pytest
 
 from pipt.core.timeutil import parse_cutoff
@@ -24,5 +22,4 @@ def test_parse_iso_with_offset():
 
 def test_parse_invalid_then_raises():
     with pytest.raises(ValueError):
-        # our function doesn't raise, so enforce raising by fromisoformat
         parse_cutoff("not-a-date")

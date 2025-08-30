@@ -1,8 +1,12 @@
 # pipt
 
+<p align="center">
+  <img src="assets/logo.png" alt="pipt logo" width="320" />
+</p>
+
 A time machine for your Python environment. Install packages as they existed on a given date.
 
-[![CI](https://github.com/your-org/pipt/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/pipt/actions/workflows/ci.yml)
+[![CI](https://github.com/OsamaS99/pipt/actions/workflows/ci.yml/badge.svg)](https://github.com/OsamaS99/pipt/actions/workflows/ci.yml)
 
 ## What is pipt?
 
